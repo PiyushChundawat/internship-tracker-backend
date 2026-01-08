@@ -441,6 +441,8 @@ app.put("/habit-entries/:id", async (req, res) => {
 
 // ==================== 3️⃣ DAILY LOGS - PIYUSH ====================
 
+// ==================== 3️⃣ DAILY LOGS - PIYUSH (UPDATED) ====================
+
 // GET /daily-logs/piyush
 app.get("/daily-logs/piyush", async (req, res) => {
   try {
@@ -503,10 +505,10 @@ app.get("/daily-logs/piyush/:date", async (req, res) => {
   }
 });
 
-// POST /daily-logs/piyush
+// POST /daily-logs/piyush (UPDATED)
 app.post("/daily-logs/piyush", async (req, res) => {
   try {
-    const { date, dsa_questions_solved, notes } = req.body;
+    const { date, striver, leetcode, codechef, codeforces, atcoder, notes } = req.body;
 
     if (!date) {
       return res.status(400).json({
@@ -518,7 +520,15 @@ app.post("/daily-logs/piyush", async (req, res) => {
 
     const { data, error } = await supabase
       .from("daily_logs_piyush")
-      .insert({ date, dsa_questions_solved: dsa_questions_solved || 0, notes })
+      .insert({
+        date,
+        striver: striver || 0,
+        leetcode: leetcode || 0,
+        codechef: codechef || 0,
+        codeforces: codeforces || 0,
+        atcoder: atcoder || 0,
+        notes,
+      })
       .select()
       .single();
 
@@ -541,11 +551,19 @@ app.post("/daily-logs/piyush", async (req, res) => {
   }
 });
 
-// PUT /daily-logs/piyush/:id
+// PUT /daily-logs/piyush/:id (UPDATED)
 app.put("/daily-logs/piyush/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { striver, leetcode, codechef, codeforces, atcoder, notes } = req.body;
+
+    const updates = {};
+    if (striver !== undefined) updates.striver = striver;
+    if (leetcode !== undefined) updates.leetcode = leetcode;
+    if (codechef !== undefined) updates.codechef = codechef;
+    if (codeforces !== undefined) updates.codeforces = codeforces;
+    if (atcoder !== undefined) updates.atcoder = atcoder;
+    if (notes !== undefined) updates.notes = notes;
 
     const { data, error } = await supabase
       .from("daily_logs_piyush")
@@ -565,6 +583,82 @@ app.put("/daily-logs/piyush/:id", async (req, res) => {
     });
   } catch (err) {
     console.error("Error updating daily log (piyush):", err);
+    res.status(500).json({
+      success: false,
+      data: null,
+      error: err.message,
+    });
+  }
+});
+
+// PATCH /daily-logs/piyush/:date/increment (NEW - for easier counter updates)
+app.patch("/daily-logs/piyush/:date/increment", async (req, res) => {
+  try {
+    const { date } = req.params;
+    const { platform } = req.body; // striver, leetcode, codechef, codeforces, atcoder
+
+    if (!platform) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: "Platform is required",
+      });
+    }
+
+    // Check if log exists for this date
+    const { data: existing } = await supabase
+      .from("daily_logs_piyush")
+      .select("*")
+      .eq("date", date)
+      .single();
+
+    let data, error;
+
+    if (!existing) {
+      // Create new log with platform set to 1
+      const insertData = {
+        date,
+        striver: 0,
+        leetcode: 0,
+        codechef: 0,
+        codeforces: 0,
+        atcoder: 0,
+      };
+      insertData[platform] = 1;
+
+      const result = await supabase
+        .from("daily_logs_piyush")
+        .insert(insertData)
+        .select()
+        .single();
+      data = result.data;
+      error = result.error;
+    } else {
+      // Increment existing
+      const updateData = {};
+      updateData[platform] = (existing[platform] || 0) + 1;
+
+      const result = await supabase
+        .from("daily_logs_piyush")
+        .update(updateData)
+        .eq("date", date)
+        .select()
+        .single();
+      data = result.data;
+      error = result.error;
+    }
+
+    if (error) throw error;
+
+    console.log("✅ Daily log incremented (piyush):", data);
+
+    res.json({
+      success: true,
+      data: data,
+      error: null,
+    });
+  } catch (err) {
+    console.error("Error incrementing daily log (piyush):", err);
     res.status(500).json({
       success: false,
       data: null,
@@ -898,6 +992,7 @@ app.post("/contest-logs", async (req, res) => {
       problems_solved,
       total_problems,
       notes,
+      upsolved,
     } = req.body;
 
     if (!platform || !contest_name || !date) {
@@ -917,6 +1012,7 @@ app.post("/contest-logs", async (req, res) => {
         problems_solved: problems_solved || 0,
         total_problems: total_problems || 0,
         notes,
+        upsolved: upsolved || false,
       })
       .select()
       .single();
@@ -990,6 +1086,46 @@ app.delete("/contest-logs/:id", async (req, res) => {
     });
   } catch (err) {
     console.error("Error deleting contest log:", err);
+    res.status(500).json({
+      success: false,
+      data: null,
+      error: err.message,
+    });
+  }
+});
+// PATCH /contest-logs/:id/toggle-upsolved (NEW)
+app.patch("/contest-logs/:id/toggle-upsolved", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // First get current upsolved status
+    const { data: current, error: fetchError } = await supabase
+      .from("contest_logs")
+      .select("upsolved")
+      .eq("id", id)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Toggle it
+    const { data, error } = await supabase
+      .from("contest_logs")
+      .update({ upsolved: !current.upsolved })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    console.log("✅ Contest upsolved status toggled:", data);
+
+    res.json({
+      success: true,
+      data: data,
+      error: null,
+    });
+  } catch (err) {
+    console.error("Error toggling upsolved status:", err);
     res.status(500).json({
       success: false,
       data: null,
@@ -1137,7 +1273,7 @@ app.get("/blind75", async (req, res) => {
 // POST /blind75
 app.post("/blind75", async (req, res) => {
   try {
-    const { question_name, solution_link, completed } = req.body;
+    const { question_name, solution_link,tutorial_link, completed } = req.body;
 
     if (!question_name) {
       return res.status(400).json({
@@ -1149,7 +1285,7 @@ app.post("/blind75", async (req, res) => {
 
     const { data, error } = await supabase
       .from("blind75")
-      .insert({ question_name, solution_link, completed: completed || false })
+      .insert({ question_name, solution_link,tutorial_link,  completed: completed || false })
       .select()
       .single();
 
